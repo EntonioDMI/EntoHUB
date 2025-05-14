@@ -1,277 +1,254 @@
-return function(tab)
-    local Hitbox = {}
+local HitboxModule = {}
 
-    local HitboxEnabled = false
-    local TeamCheckEnabled = true
-    local HitboxTargetPart = "Head"
-    local HitboxScale = 5
-    local HitboxColor = Color3.fromRGB(255, 0, 0)
-    local HitboxTransparency = 0.7
+local HitboxEnabled = false
+local TeamCheckEnabled = true
+local HitboxTargetPartName = "Head"
+local HitboxScaleValue = 5
+local HitboxColorValue = Color3.fromRGB(255, 0, 0)
+local HitboxTransparencyValue = 0.7
 
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    local RunService = game:GetService("RunService")
-    local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
 
-    local originalProperties = {}
+local originalPartProperties = {}
 
-    local function GetTeamColor(player)
-        if player and player.Team then
-            return player.Team.TeamColor.Color
-        end
-        return nil
+local function GetTeamColor(player)
+    if player and player.Team then
+        return player.Team.TeamColor.Color
     end
+    return nil
+end
 
-    local function GetTargetPart(character)
-        if not character then return nil end
-        if character:FindFirstChild("Humanoid") then
-            if character.Humanoid.RigType == Enum.HumanoidRigType.R15 then
-                if HitboxTargetPart == "Head" then
-                    return character:FindFirstChild("Head")
-                elseif HitboxTargetPart == "Torso" then
-                    return character:FindFirstChild("UpperTorso")
-                end
-            elseif character.Humanoid.RigType == Enum.HumanoidRigType.R6 then
-                 if HitboxTargetPart == "Head" then
-                    return character:FindFirstChild("Head")
-                elseif HitboxTargetPart == "Torso" then
-                    return character:FindFirstChild("Torso")
-                end
+local function GetActualTargetPart(character)
+    if not character then return nil end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+
+    if humanoid.RigType == Enum.HumanoidRigType.R15 then
+        if HitboxTargetPartName == "Head" then
+            return character:FindFirstChild("Head")
+        elseif HitboxTargetPartName == "Torso" then
+            return character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso") or character:FindFirstChild("Torso")
+        end
+    elseif humanoid.RigType == Enum.HumanoidRigType.R6 then
+        if HitboxTargetPartName == "Head" then
+            return character:FindFirstChild("Head")
+        elseif HitboxTargetPartName == "Torso" then
+            return character:FindFirstChild("Torso")
+        end
+    end
+    return character:FindFirstChild(HitboxTargetPartName) 
+end
+
+local function RevertPartProperties(player, partInstance)
+    if not player or not partInstance then return end
+    local originalKey = player.UserId .. "_" .. partInstance.Name
+    if originalPartProperties[originalKey] then
+        local props = originalPartProperties[originalKey]
+        pcall(function()
+            partInstance.Size = props.Size
+            partInstance.Material = props.Material
+            partInstance.Transparency = props.Transparency
+            partInstance.Color = props.Color
+            partInstance.CanCollide = props.CanCollide
+        end)
+        originalPartProperties[originalKey] = nil
+    end
+end
+
+local function ApplyHitboxToCharacter(character)
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local player = Players:GetPlayerFromCharacter(character)
+    if not player or player == LocalPlayer then return end
+
+    local targetPart = GetActualTargetPart(character)
+    if not targetPart then 
+        for _, storedPlayer in pairs(Players:GetPlayers()) do
+            if storedPlayer.Character then
+                local storedTargetPart = GetActualTargetPart(storedPlayer.Character)
+                if storedTargetPart then RevertPartProperties(storedPlayer, storedTargetPart) end
             end
         end
-        return nil
+        return 
     end
 
-    local function ApplyHitbox(character)
-        if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-        local player = Players:GetPlayerFromCharacter(character)
-        if not player or player == LocalPlayer then return end
+    local originalKey = player.UserId .. "_" .. targetPart.Name
 
-        local targetPart = GetTargetPart(character)
-        if not targetPart then return end
+    if not HitboxEnabled then
+        RevertPartProperties(player, targetPart)
+        return
+    end
 
-        local originalKey = player.UserId .. "_" .. targetPart.Name
-
-        if not HitboxEnabled then
-            if originalProperties[originalKey] then
-                targetPart.Size = originalProperties[originalKey].Size
-                targetPart.Material = originalProperties[originalKey].Material
-                targetPart.Transparency = originalProperties[originalKey].Transparency
-                targetPart.Color = originalProperties[originalKey].Color
-                targetPart.CanCollide = originalProperties[originalKey].CanCollide
-                originalProperties[originalKey] = nil
-            end
+    if TeamCheckEnabled then
+        local localPlayerTeamColor = GetTeamColor(LocalPlayer)
+        local targetPlayerTeamColor = GetTeamColor(player)
+        if (localPlayerTeamColor and targetPlayerTeamColor and localPlayerTeamColor == targetPlayerTeamColor) or 
+           (not localPlayerTeamColor or not targetPlayerTeamColor) then 
+            RevertPartProperties(player, targetPart)
             return
         end
+    end
 
-        if TeamCheckEnabled then
-            local localPlayerTeamColor = GetTeamColor(LocalPlayer)
-            local targetPlayerTeamColor = GetTeamColor(player)
-            if localPlayerTeamColor and targetPlayerTeamColor and localPlayerTeamColor == targetPlayerTeamColor then
-                if originalProperties[originalKey] then
-                    targetPart.Size = originalProperties[originalKey].Size
-                    targetPart.Material = originalProperties[originalKey].Material
-                    targetPart.Transparency = originalProperties[originalKey].Transparency
-                    targetPart.Color = originalProperties[originalKey].Color
-                    targetPart.CanCollide = originalProperties[originalKey].CanCollide
-                    originalProperties[originalKey] = nil
-                end
-                return
-            elseif not localPlayerTeamColor or not targetPlayerTeamColor then
-                 if originalProperties[originalKey] then
-                    targetPart.Size = originalProperties[originalKey].Size
-                    targetPart.Material = originalProperties[originalKey].Material
-                    targetPart.Transparency = originalProperties[originalKey].Transparency
-                    targetPart.Color = originalProperties[originalKey].Color
-                    targetPart.CanCollide = originalProperties[originalKey].CanCollide
-                    originalProperties[originalKey] = nil
-                end
-                return
+    if not originalPartProperties[originalKey] then
+        originalPartProperties[originalKey] = {
+            Size = targetPart.Size,
+            Material = targetPart.Material,
+            Transparency = targetPart.Transparency,
+            Color = targetPart.Color,
+            CanCollide = targetPart.CanCollide
+        }
+    end
+
+    local newSize
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        if humanoid.RigType == Enum.HumanoidRigType.R15 then
+            if HitboxTargetPartName == "Head" then
+                newSize = Vector3.new(HitboxScaleValue, HitboxScaleValue, HitboxScaleValue)
+            elseif HitboxTargetPartName == "Torso" then
+                local hrpSize = character.HumanoidRootPart.Size
+                newSize = Vector3.new(hrpSize.X * (HitboxScaleValue / 2.5), hrpSize.Y * (HitboxScaleValue / 2), hrpSize.Z * (HitboxScaleValue / 2.5))
+            else 
+                newSize = Vector3.new(HitboxScaleValue, HitboxScaleValue, HitboxScaleValue)
             end
-        end
-
-        if not originalProperties[originalKey] then
-            originalProperties[originalKey] = {
-                Size = targetPart.Size,
-                Material = targetPart.Material,
-                Transparency = targetPart.Transparency,
-                Color = targetPart.Color,
-                CanCollide = targetPart.CanCollide
-            }
-        end
-
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
-            if HitboxTargetPart == "Head" then
-                 targetPart.Size = Vector3.new(HitboxScale, HitboxScale, HitboxScale)
-            elseif HitboxTargetPart == "Torso" then 
-                 targetPart.Size = Vector3.new(humanoid.RootPart.Size.X * (HitboxScale/2), humanoid.RootPart.Size.Y * (HitboxScale/2), humanoid.RootPart.Size.Z * (HitboxScale/2)) 
-            end
-        elseif humanoid and humanoid.RigType == Enum.HumanoidRigType.R6 then
-            if HitboxTargetPart == "Head" then
-                targetPart.Size = Vector3.new(HitboxScale, HitboxScale, HitboxScale)
-            elseif HitboxTargetPart == "Torso" then
-                targetPart.Size = Vector3.new(2 * (HitboxScale/2.5), 2 * (HitboxScale/2.5), 1 * (HitboxScale/2.5))
+        elseif humanoid.RigType == Enum.HumanoidRigType.R6 then
+            if HitboxTargetPartName == "Head" then
+                newSize = Vector3.new(HitboxScaleValue, HitboxScaleValue, HitboxScaleValue)
+            elseif HitboxTargetPartName == "Torso" then
+                newSize = Vector3.new(2 * (HitboxScaleValue / 2.5), 2 * (HitboxScaleValue / 2.5), 1 * (HitboxScaleValue / 2.5))
+            else
+                 newSize = Vector3.new(HitboxScaleValue, HitboxScaleValue, HitboxScaleValue)
             end
         else
-             targetPart.Size = Vector3.new(HitboxScale, HitboxScale, HitboxScale)
+            newSize = Vector3.new(HitboxScaleValue, HitboxScaleValue, HitboxScaleValue)
         end
-        
+    else
+        newSize = Vector3.new(HitboxScaleValue, HitboxScaleValue, HitboxScaleValue)
+    end
+    
+    pcall(function()
+        targetPart.Size = newSize
         targetPart.Material = Enum.Material.SmoothPlastic
-        targetPart.Color = HitboxColor
-        targetPart.Transparency = HitboxTransparency
+        targetPart.Color = HitboxColorValue
+        targetPart.Transparency = HitboxTransparencyValue
         targetPart.CanCollide = false
-    end
+    end)
+end
 
-    local function RevertAllHitboxes()
-        for key, props in pairs(originalProperties) do
-            local userId, partName = string.match(key, "(%d+)_(.+)")
-            local player = Players:GetPlayerByUserId(tonumber(userId))
+local function RevertAllCharacterHitboxes()
+    for userIdStr, props in pairs(originalPartProperties) do
+        local userId = tonumber(string.match(userIdStr, "^(%d+)"))
+        local partName = string.match(userIdStr, "_(.+)$")
+        if userId and partName then
+            local player = Players:GetPlayerByUserId(userId)
             if player and player.Character then
-                local targetPartInstance = player.Character:FindFirstChild(partName, true)
-                if targetPartInstance then
-                    targetPartInstance.Size = props.Size
-                    targetPartInstance.Material = props.Material
-                    targetPartInstance.Transparency = props.Transparency
-                    targetPartInstance.Color = props.Color
-                    targetPartInstance.CanCollide = props.CanCollide
+                local partInstance = player.Character:FindFirstChild(partName, true)
+                if partInstance then
+                    RevertPartProperties(player, partInstance)
                 end
             end
         end
-        originalProperties = {}
     end
+    originalPartProperties = {}
+end
 
-    tab:CreateToggle({
-        Name = "Enabled",
-        CurrentValue = HitboxEnabled,
-        Flag = "HitboxEnabled",
-        Callback = function(value)
-            HitboxEnabled = value
-            if not value then
-                RevertAllHitboxes()
-            else
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player.Character then
-                        ApplyHitbox(player.Character)
-                    end
-                end
-            end
+function HitboxModule.SetEnabled(value)
+    HitboxEnabled = value
+    if not value then
+        RevertAllCharacterHitboxes()
+    else
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then ApplyHitboxToCharacter(player.Character) end
         end
-    })
+    end
+end
 
-    tab:CreateToggle({
-        Name = "TeamCheck",
-        CurrentValue = TeamCheckEnabled,
-        Flag = "HitboxTeamCheck",
-        Callback = function(value)
-            TeamCheckEnabled = value
-            RevertAllHitboxes()
-             if HitboxEnabled then
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player.Character then
-                        ApplyHitbox(player.Character)
-                    end
-                end
-            end
+function HitboxModule.SetTeamCheck(value)
+    TeamCheckEnabled = value
+    RevertAllCharacterHitboxes()
+    if HitboxEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then ApplyHitboxToCharacter(player.Character) end
         end
-    })
+    end
+end
 
-    tab:CreateDropdown({
-        Name = "Hitbox Part",
-        Options = {"Head", "Torso"},
-        CurrentValue = HitboxTargetPart,
-        Flag = "HitboxTargetPart",
-        Callback = function(value)
-            RevertAllHitboxes()
-            HitboxTargetPart = value
-            if HitboxEnabled then
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player.Character then
-                        ApplyHitbox(player.Character)
-                    end
-                end
-            end
+function HitboxModule.SetTargetPart(value)
+    RevertAllCharacterHitboxes()
+    HitboxTargetPartName = value
+    if HitboxEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then ApplyHitboxToCharacter(player.Character) end
         end
-    })
+    end
+end
 
-    tab:CreateSlider({
-        Name = "Scale",
-        Range = {1, 50},
-        Increment = 0.5,
-        Suffix = "x",
-        CurrentValue = HitboxScale,
-        Flag = "HitboxScale",
-        Callback = function(value)
-            HitboxScale = value
-        end
-    })
+function HitboxModule.SetScale(value)
+    HitboxScaleValue = value
+end
 
-    tab:CreateColorPicker({
-        Name = "Hitbox Color",
-        Color = HitboxColor,
-        Flag = "HitboxColor",
-        Callback = function(color)
-            HitboxColor = color
-        end
-    })
+function HitboxModule.SetColor(value)
+    HitboxColorValue = value
+end
 
-    tab:CreateSlider({
-        Name = "Transparency",
-        Range = {0, 1},
-        Increment = 0.05,
-        Suffix = "",
-        CurrentValue = HitboxTransparency,
-        Flag = "HitboxTransparency",
-        Callback = function(value)
-            HitboxTransparency = value
-        end
-    })
+function HitboxModule.SetTransparency(value)
+    HitboxTransparencyValue = value
+end
 
-    local function CharacterAdded(character)
-        if HitboxEnabled then
-            ApplyHitbox(character)
-        end
-        character.Humanoid.Died:Connect(function()
+local function OnCharacterAdded(character)
+    if HitboxEnabled then
+        ApplyHitboxToCharacter(character)
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.Died:Connect(function()
             local player = Players:GetPlayerFromCharacter(character)
             if player then
-                 local targetPart = GetTargetPart(character)
-                 if targetPart then
+                local targetPart = GetActualTargetPart(character)
+                if targetPart then
                     local originalKey = player.UserId .. "_" .. targetPart.Name
-                    if originalProperties[originalKey] then
-                        originalProperties[originalKey] = nil
+                    if originalPartProperties[originalKey] then
+                        originalPartProperties[originalKey] = nil
                     end
-                 end
+                end
             end
         end)
     end
+end
 
-    Players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(CharacterAdded)
-        if player.Character then
-            CharacterAdded(player.Character)
-        end
-    end)
+local function OnPlayerAdded(player)
+    player.CharacterAdded:Connect(OnCharacterAdded)
+    if player.Character then OnCharacterAdded(player.Character) end
+end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character then
-            CharacterAdded(player.Character)
-        end
+local function OnPlayerRemoving(player)
+    if player.Character then
+        local targetPart = GetActualTargetPart(player.Character)
+        if targetPart then RevertPartProperties(player, targetPart) end
     end
+end
 
-    RunService.RenderStepped:Connect(function()
-        if HitboxEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then
-                    ApplyHitbox(player.Character)
-                end
+Players.PlayerAdded:Connect(OnPlayerAdded)
+for _, player in ipairs(Players:GetPlayers()) do
+    OnPlayerAdded(player)
+end
+Players.PlayerRemoving:Connect(OnPlayerRemoving)
+
+RunService.RenderStepped:Connect(function()
+    if HitboxEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then
+                ApplyHitboxToCharacter(player.Character)
             end
         end
-    end)
+    end
+end)
 
-    game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(teleportState)
-        if teleportState == Enum.TeleportState.InProgress then
-            RevertAllHitboxes()
-        end
-    end)
+LocalPlayer.OnTeleport:Connect(function(teleportState)
+    if teleportState == Enum.TeleportState.Started or teleportState == Enum.TeleportState.InProgress then
+        RevertAllCharacterHitboxes()
+    end
+end)
 
-end
+return HitboxModule
