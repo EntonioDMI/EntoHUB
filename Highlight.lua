@@ -1,3 +1,5 @@
+return function()
+
 local HighlightModule = {}
 
 local HighlightEnabled = false
@@ -144,3 +146,4 @@ RunService.RenderStepped:Connect(function()
 end)
 
 return HighlightModule
+end

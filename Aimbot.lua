@@ -1,3 +1,5 @@
+return function()
+
 local AimbotModule = {}
 
 local AimbotEnabled = false
@@ -184,3 +186,4 @@ LocalPlayer.OnTeleport:Connect(function(teleportState)
 end)
 
 return AimbotModule
+end

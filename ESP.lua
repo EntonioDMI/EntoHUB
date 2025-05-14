@@ -1,3 +1,5 @@
+return function()
+
 local ESPModule = {}
 
 local ESPEnabled = false
@@ -232,3 +234,4 @@ RunService.RenderStepped:Connect(function()
 end)
 
 return ESPModule
+end

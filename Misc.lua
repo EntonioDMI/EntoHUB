@@ -1,3 +1,5 @@
+return function()
+
 local MiscModule = {}
 
 local GravityEmulationEnabled = false
@@ -140,3 +142,4 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 return MiscModule
+end

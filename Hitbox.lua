@@ -1,3 +1,5 @@
+return function()
+
 local HitboxModule = {}
 
 local HitboxEnabled = false
@@ -252,3 +254,4 @@ LocalPlayer.OnTeleport:Connect(function(teleportState)
 end)
 
 return HitboxModule
+end
