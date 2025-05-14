@@ -1,301 +1,332 @@
-local VisualsModule = {}
+return function(tabInstance, sharedContext)
+    local uiLibrary = sharedContext.uiLibrary
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local Camera = game.Workspace.CurrentCamera
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
+    local visualSettings = {
+        highlightEnabled = false,
+        highlightTeamColor = true,
+        highlightTransparency = 0.5,
+        highlightColor = Color3.fromRGB(255, 255, 0),
+        highlightRainbowMode = false,
+        highlightRainbowSpeed = 1,
+        espEnabled = false,
+        espShowHp = true,
+        espShowWeapon = true,
+        espShowDistance = true,
+        espShowName = true,
+        espShowBoundingBox = true
+    }
 
-local FriendsManager = require(script.Parent:WaitForChild("FriendsManager"))
+    local highlights = {}
+    local esps = {}
 
-local espSettings = {
-    Enabled = false,
-    ShowName = true,
-    ShowHP = true,
-    ShowWeapon = true,
-    ShowDistance = true,
-    ShowBoundingBox = true,
-    TeamCheck = true 
-}
+    local highlightSection = tabInstance:CreateSection({
+        Name = "Highlight"
+    })
 
-local chamsSettings = {
-    Enabled = false,
-    TeamCheck = true,
-    RainbowMode = false,
-    RainbowSpeed = 1,
-    HighlightColor = Color3.fromRGB(255, 255, 0),
-    FriendHighlightColor = Color3.fromRGB(0, 255, 0) 
-}
+    highlightSection:AddToggle({
+        Name = "Enabled",
+        Flag = "VisualsHighlight_Enabled",
+        Callback = function(value)
+            visualSettings.highlightEnabled = value
+            if not value then
+                for player, highlight in pairs(highlights) do
+                    if highlight and highlight.Parent then highlight:Destroy() end
+                end
+                highlights = {}
+            end
+        end
+    })
 
-local espElementsCache = {}
-local chamsHighlightCache = {}
+    highlightSection:AddToggle({
+        Name = "Team Color",
+        Flag = "VisualsHighlight_TeamColor",
+        Default = true,
+        Callback = function(value)
+            visualSettings.highlightTeamColor = value
+        end
+    })
 
-local function GetTeam(player)
-    return player and player.Team
-end
+    highlightSection:AddSlider({
+        Name = "Transparency",
+        Flag = "VisualsHighlight_Transparency",
+        Value = 0.5,
+        Min = 0,
+        Max = 1,
+        Precise = 2,
+        Callback = function(value)
+            visualSettings.highlightTransparency = value
+        end
+    })
 
+    highlightSection:AddColorpicker({
+        Name = "Highlight Color",
+        Flag = "VisualsHighlight_Color",
+        Default = Color3.fromRGB(255, 255, 0),
+        Callback = function(value)
+            visualSettings.highlightColor = value
+        end
+    })
 
-local function CreateESPGuiForPlayer(player)
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+    highlightSection:AddToggle({
+        Name = "Rainbow Mode",
+        Flag = "VisualsHighlight_RainbowMode",
+        Callback = function(value)
+            visualSettings.highlightRainbowMode = value
+        end
+    })
 
-    local billboardGui = Instance.new("BillboardGui")
-    billboardGui.Name = "PlayerESP_Visuals_" .. player.Name
-    billboardGui.Adornee = character:FindFirstChild("HumanoidRootPart")
-    billboardGui.Size = UDim2.new(0, 200, 0, 120) 
-    billboardGui.AlwaysOnTop = true
-    billboardGui.StudsOffset = Vector3.new(0, 3, 0)
-    billboardGui.LightInfluence = 0
-    billboardGui.Parent = character
+    highlightSection:AddSlider({
+        Name = "Rainbow Speed",
+        Flag = "VisualsHighlight_RainbowSpeed",
+        Value = 1,
+        Min = 0.1,
+        Max = 5,
+        Precise = 1,
+        Callback = function(value)
+            visualSettings.highlightRainbowSpeed = value
+        end
+    })
 
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(1, 0, 1, 0)
-    mainFrame.BackgroundTransparency = 1
-    mainFrame.Parent = billboardGui
+    local espSection = tabInstance:CreateSection({
+        Name = "ESP"
+    })
 
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NameLabel"
-    nameLabel.Size = UDim2.new(1, 0, 0, 20)
-    nameLabel.Position = UDim2.new(0, 0, 0, 5)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextScaled = true
-    nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextColor3 = Color3.new(1, 1, 1)
-    nameLabel.TextStrokeTransparency = 0.2
-    nameLabel.TextStrokeColor3 = Color3.new(0,0,0)
-    nameLabel.Parent = mainFrame
+    espSection:AddToggle({
+        Name = "Enabled",
+        Flag = "VisualsEsp_Enabled",
+        Callback = function(value)
+            visualSettings.espEnabled = value
+            if not value then
+                for player, espElements in pairs(esps) do
+                    for _, element in pairs(espElements) do
+                        if element and element.Parent then element:Destroy() end
+                    end
+                end
+                esps = {}
+            end
+        end
+    })
 
-    local hpBarBackground = Instance.new("Frame")
-    hpBarBackground.Name = "HPBarBackground"
-    hpBarBackground.Size = UDim2.new(0.8, 0, 0, 8)
-    hpBarBackground.Position = UDim2.new(0.1, 0, 0, 30)
-    hpBarBackground.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    hpBarBackground.BorderSizePixel = 1
-    hpBarBackground.BorderColor3 = Color3.fromRGB(10,10,10)
-    hpBarBackground.Parent = mainFrame
+    espSection:AddToggle({ Name = "Show HP", Flag = "VisualsEsp_ShowHp", Default = true, Callback = function(v) visualSettings.espShowHp = v end })
+    espSection:AddToggle({ Name = "Show Weapon", Flag = "VisualsEsp_ShowWeapon", Default = true, Callback = function(v) visualSettings.espShowWeapon = v end })
+    espSection:AddToggle({ Name = "Show Distance", Flag = "VisualsEsp_ShowDistance", Default = true, Callback = function(v) visualSettings.espShowDistance = v end })
+    espSection:AddToggle({ Name = "Show Name", Flag = "VisualsEsp_ShowName", Default = true, Callback = function(v) visualSettings.espShowName = v end })
+    espSection:AddToggle({ Name = "Show Bounding Box", Flag = "VisualsEsp_ShowBoundingBox", Default = true, Callback = function(v) visualSettings.espShowBoundingBox = v end })
 
-    local hpBar = Instance.new("Frame")
-    hpBar.Name = "HPBar"
-    hpBar.Size = UDim2.new(1, 0, 1, 0)
-    hpBar.BackgroundColor3 = Color3.new(0, 1, 0)
-    hpBar.BorderSizePixel = 0
-    hpBar.Parent = hpBarBackground
+    local function createOrUpdateHighlight(player)
+        if not player or not player.Character then return end
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.Health <= 0 then
+            if highlights[player] then
+                highlights[player]:Destroy()
+                highlights[player] = nil
+            end
+            return
+        end
 
-    local distanceLabel = Instance.new("TextLabel")
-    distanceLabel.Name = "DistanceLabel"
-    distanceLabel.Size = UDim2.new(1, 0, 0, 15)
-    distanceLabel.Position = UDim2.new(0, 0, 0, 45)
-    distanceLabel.BackgroundTransparency = 1
-    distanceLabel.TextScaled = true
-    distanceLabel.Font = Enum.Font.Gotham
-    distanceLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-    distanceLabel.TextStrokeTransparency = 0.4
-    distanceLabel.Parent = mainFrame
+        if not highlights[player] or not highlights[player].Parent then
+            local highlight = Instance.new("Highlight", player.Character)
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.FillTransparency = 1 
+            highlights[player] = highlight
+        end
 
-    local weaponLabel = Instance.new("TextLabel")
-    weaponLabel.Name = "WeaponLabel"
-    weaponLabel.Size = UDim2.new(1, 0, 0, 15)
-    weaponLabel.Position = UDim2.new(0, 0, 0, 65)
-    weaponLabel.BackgroundTransparency = 1
-    weaponLabel.TextScaled = true
-    weaponLabel.Font = Enum.Font.Gotham
-    weaponLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-    weaponLabel.TextStrokeTransparency = 0.4
-    weaponLabel.Parent = mainFrame
-    
-    local boundingBoxAdornment = Instance.new("BoxHandleAdornment")
-    boundingBoxAdornment.Name = "BoundingBoxAdornment"
-    boundingBoxAdornment.Adornee = character
-    boundingBoxAdornment.Size = character:GetExtentsSize()
-    boundingBoxAdornment.Color3 = Color3.new(1,1,1)
-    boundingBoxAdornment.Transparency = 0.7 
-    boundingBoxAdornment.AlwaysOnTop = true
-    boundingBoxAdornment.ZIndex = 0 
-    boundingBoxAdornment.Parent = billboardGui 
+        local currentHighlight = highlights[player]
+        currentHighlight.Enabled = true
+        currentHighlight.OutlineTransparency = visualSettings.highlightTransparency
 
-    return billboardGui
-end
-
-local function UpdateESPForPlayer(player)
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then
-        if espElementsCache[player] then espElementsCache[player]:Destroy(); espElementsCache[player] = nil; end
-        return
-    end
-
-    if player == LocalPlayer or (espSettings.TeamCheck and GetTeam(player) == GetTeam(LocalPlayer) and not FriendsManager.IsFriend(player.UserId)) or (FriendsManager.IsFriend(player.UserId) and not chamsSettings.Enabled) then 
-        if espElementsCache[player] then espElementsCache[player]:Destroy(); espElementsCache[player] = nil; end
-        return
-    end
-
-    local billboardGui = espElementsCache[player]
-    if not billboardGui or not billboardGui.Parent then
-        billboardGui = CreateESPGuiForPlayer(player)
-        if not billboardGui then return end
-        espElementsCache[player] = billboardGui
-    end
-
-    billboardGui.Enabled = espSettings.Enabled and not FriendsManager.IsFriend(player.UserId)
-    if not espSettings.Enabled and not (chamsSettings.Enabled and FriendsManager.IsFriend(player.UserId)) then 
-        if billboardGui then billboardGui:Destroy(); espElementsCache[player] = nil; end
-        return 
-    end
-
-    local humanoid = character.Humanoid
-    local mainFrame = billboardGui:FindFirstChild("MainFrame")
-    if not mainFrame then return end
-
-    mainFrame.Visible = espSettings.Enabled and not FriendsManager.IsFriend(player.UserId)
-
-    local nameLabel = mainFrame:FindFirstChild("NameLabel")
-    if nameLabel then
-        nameLabel.Visible = espSettings.ShowName
-        if espSettings.ShowName then nameLabel.Text = player.DisplayName end
-    end
-
-    local hpBarBackground = mainFrame:FindFirstChild("HPBarBackground")
-    local hpBar = hpBarBackground and hpBarBackground:FindFirstChild("HPBar")
-    if hpBar then
-        hpBarBackground.Visible = espSettings.ShowHP
-        if espSettings.ShowHP then
-            local hpPercent = humanoid.Health / humanoid.MaxHealth
-            hpBar.Size = UDim2.new(hpPercent, 0, 1, 0)
-            if hpPercent > 0.6 then hpBar.BackgroundColor3 = Color3.fromRGB(85, 255, 85)
-            elseif hpPercent > 0.3 then hpBar.BackgroundColor3 = Color3.fromRGB(255, 255, 85)
-            else hpBar.BackgroundColor3 = Color3.fromRGB(255, 85, 85) end
+        if sharedContext:isFriend(player.UserId) then
+            local timeVal = tick()
+            local pulse = (math.sin(timeVal * 5) + 1) / 2 
+            currentHighlight.OutlineColor = Color3.new(0, 0.8 + pulse * 0.2, 0) 
+            currentHighlight.FillColor = Color3.new(0, 1, 0)
+            currentHighlight.FillTransparency = 0.8 - (pulse * 0.3)
+        elseif visualSettings.highlightRainbowMode then
+            currentHighlight.OutlineColor = Color3.fromHSV(tick() * visualSettings.highlightRainbowSpeed % 1, 1, 1)
+            currentHighlight.FillTransparency = 1
+        elseif visualSettings.highlightTeamColor and player.TeamColor then
+            currentHighlight.OutlineColor = player.TeamColor.Color
+            currentHighlight.FillTransparency = 1
+        else
+            currentHighlight.OutlineColor = visualSettings.highlightColor
+            currentHighlight.FillTransparency = 1
         end
     end
 
-    local distanceLabel = mainFrame:FindFirstChild("DistanceLabel")
-    if distanceLabel then
-        distanceLabel.Visible = espSettings.ShowDistance
-        if espSettings.ShowDistance and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-            distanceLabel.Text = string.format("%.0fm", distance)
+    local function createOrUpdateEsp(player)
+        if not player or not player.Character then return end
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+
+        if not humanoid or humanoid.Health <= 0 or not hrp then
+            if esps[player] then
+                for _, element in pairs(esps[player]) do element:Destroy() end
+                esps[player] = nil
+            end
+            return
+        end
+
+        if not esps[player] then esps[player] = {} end
+        local playerEsp = esps[player]
+
+        local isFriend = sharedContext:isFriend(player.UserId)
+        local espColor = isFriend and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255,255,0)
+
+        local headPosition = hrp.Position + Vector3.new(0, 2.5, 0)
+        local screenPos, onScreen = Camera:WorldToScreenPoint(headPosition)
+
+        if onScreen then
+            local yOffset = 0
+
+            if visualSettings.espShowName then
+                if not playerEsp.nameLabel then
+                    playerEsp.nameLabel = Drawing.new("Text")
+                end
+                playerEsp.nameLabel.Visible = true
+                playerEsp.nameLabel.Text = player.Name
+                playerEsp.nameLabel.Color = espColor
+                playerEsp.nameLabel.Size = 14
+                playerEsp.nameLabel.Center = true
+                playerEsp.nameLabel.Outline = true
+                playerEsp.nameLabel.Position = Vector2.new(screenPos.X, screenPos.Y + yOffset)
+                yOffset = yOffset + 15
+            elseif playerEsp.nameLabel then playerEsp.nameLabel.Visible = false end
+
+            if visualSettings.espShowHp and not isFriend then
+                if not playerEsp.hpLabel then
+                    playerEsp.hpLabel = Drawing.new("Text")
+                end
+                playerEsp.hpLabel.Visible = true
+                playerEsp.hpLabel.Text = "HP: " .. math.floor(humanoid.Health)
+                playerEsp.hpLabel.Color = Color3.fromHSV(humanoid.Health / humanoid.MaxHealth * 0.33, 1, 1)
+                playerEsp.hpLabel.Size = 12
+                playerEsp.hpLabel.Center = true
+                playerEsp.hpLabel.Outline = true
+                playerEsp.hpLabel.Position = Vector2.new(screenPos.X, screenPos.Y + yOffset)
+                yOffset = yOffset + 15
+            elseif playerEsp.hpLabel then playerEsp.hpLabel.Visible = false end
+
+            if visualSettings.espShowWeapon and not isFriend then
+                local tool = player.Character:FindFirstChildOfClass("Tool")
+                if tool then
+                    if not playerEsp.weaponLabel then
+                        playerEsp.weaponLabel = Drawing.new("Text")
+                    end
+                    playerEsp.weaponLabel.Visible = true
+                    playerEsp.weaponLabel.Text = tool.Name
+                    playerEsp.weaponLabel.Color = espColor
+                    playerEsp.weaponLabel.Size = 12
+                    playerEsp.weaponLabel.Center = true
+                    playerEsp.weaponLabel.Outline = true
+                    playerEsp.weaponLabel.Position = Vector2.new(screenPos.X, screenPos.Y + yOffset)
+                    yOffset = yOffset + 15
+                elseif playerEsp.weaponLabel then playerEsp.weaponLabel.Visible = false end
+            elseif playerEsp.weaponLabel then playerEsp.weaponLabel.Visible = false end
+
+            if visualSettings.espShowDistance then
+                local localPlayer = Players.LocalPlayer
+                if localPlayer and localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local distance = (localPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                    if not playerEsp.distanceLabel then
+                        playerEsp.distanceLabel = Drawing.new("Text")
+                    end
+                    playerEsp.distanceLabel.Visible = true
+                    playerEsp.distanceLabel.Text = math.floor(distance) .. "m"
+                    playerEsp.distanceLabel.Color = espColor
+                    playerEsp.distanceLabel.Size = 12
+                    playerEsp.distanceLabel.Center = true
+                    playerEsp.distanceLabel.Outline = true
+                    playerEsp.distanceLabel.Position = Vector2.new(screenPos.X, screenPos.Y + yOffset)
+                    yOffset = yOffset + 15
+                elseif playerEsp.distanceLabel then playerEsp.distanceLabel.Visible = false end
+            elseif playerEsp.distanceLabel then playerEsp.distanceLabel.Visible = false end
+
+            if visualSettings.espShowBoundingBox then
+                local cframe = hrp.CFrame
+                local size = player.Character:GetExtentsSize()
+                local points = {
+                    cframe * Vector3.new(size.X/2, size.Y/2, size.Z/2),
+                    cframe * Vector3.new(size.X/2, size.Y/2, -size.Z/2),
+                    cframe * Vector3.new(size.X/2, -size.Y/2, size.Z/2),
+                    cframe * Vector3.new(size.X/2, -size.Y/2, -size.Z/2),
+                    cframe * Vector3.new(-size.X/2, size.Y/2, size.Z/2),
+                    cframe * Vector3.new(-size.X/2, size.Y/2, -size.Z/2),
+                    cframe * Vector3.new(-size.X/2, -size.Y/2, size.Z/2),
+                    cframe * Vector3.new(-size.X/2, -size.Y/2, -size.Z/2)
+                }
+                local screenPoints = {}
+                local minX, minY = math.huge, math.huge
+                local maxX, maxY = -math.huge, -math.huge
+                local allOnScreen = true
+                for _, point in ipairs(points) do
+                    local sp, sop = Camera:WorldToScreenPoint(point)
+                    if not sop then allOnScreen = false; break end
+                    table.insert(screenPoints, Vector2.new(sp.X, sp.Y))
+                    minX = math.min(minX, sp.X)
+                    minY = math.min(minY, sp.Y)
+                    maxX = math.max(maxX, sp.X)
+                    maxY = math.max(maxY, sp.Y)
+                end
+
+                if allOnScreen then
+                    if not playerEsp.boundingBox then playerEsp.boundingBox = {} end
+                    local boxLines = {
+                        {Vector2.new(minX, minY), Vector2.new(maxX, minY)}, 
+                        {Vector2.new(minX, maxY), Vector2.new(maxX, maxY)}, 
+                        {Vector2.new(minX, minY), Vector2.new(minX, maxY)}, 
+                        {Vector2.new(maxX, minY), Vector2.new(maxX, maxY)}  
+                    }
+                    for i, linePoints in ipairs(boxLines) do
+                        if not playerEsp.boundingBox[i] then
+                            playerEsp.boundingBox[i] = Drawing.new("Line")
+                        end
+                        playerEsp.boundingBox[i].Visible = true
+                        playerEsp.boundingBox[i].From = linePoints[1]
+                        playerEsp.boundingBox[i].To = linePoints[2]
+                        playerEsp.boundingBox[i].Color = espColor
+                        playerEsp.boundingBox[i].Thickness = 1
+                    end
+                elseif playerEsp.boundingBox then
+                    for _, line in pairs(playerEsp.boundingBox) do line.Visible = false end
+                end
+            elseif playerEsp.boundingBox then
+                 for _, line in pairs(playerEsp.boundingBox) do line.Visible = false end
+            end
+
+        else 
+            if esps[player] then
+                for _, element in pairs(esps[player]) do element.Visible = false end
+            end
         end
     end
 
-    local weaponLabel = mainFrame:FindFirstChild("WeaponLabel")
-    if weaponLabel then
-        weaponLabel.Visible = espSettings.ShowWeapon
-        if espSettings.ShowWeapon then
-            local tool = character:FindFirstChildOfClass("Tool")
-            weaponLabel.Text = tool and tool.Name or "-"
-        end
-    end
-    
-    local boundingBoxAdornment = billboardGui:FindFirstChild("BoundingBoxAdornment")
-    if boundingBoxAdornment then
-        boundingBoxAdornment.Visible = espSettings.ShowBoundingBox and not FriendsManager.IsFriend(player.UserId)
-        if boundingBoxAdornment.Visible then
-            boundingBoxAdornment.Size = character:GetExtentsSize() * Vector3.new(1.1, 1.05, 1.1)
-            local teamColor = player.Team and player.Team.TeamColor.Color or Color3.new(0.8,0.8,0.8)
-            boundingBoxAdornment.Color3 = teamColor
-        end
-    end
-end
+    RunService.RenderStepped:Connect(function()
+        local localPlayer = Players.LocalPlayer
+        if not localPlayer then return end
 
-local function UpdateChamsForPlayer(player)
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        if chamsHighlightCache[player] then chamsHighlightCache[player]:Destroy(); chamsHighlightCache[player] = nil; end
-        return
-    end
-
-    if player == LocalPlayer then
-        if chamsHighlightCache[player] then chamsHighlightCache[player]:Destroy(); chamsHighlightCache[player] = nil; end
-        return
-    end
-
-    local isFriend = FriendsManager.IsFriend(player.UserId)
-    local isTeamMate = GetTeam(player) == GetTeam(LocalPlayer)
-
-    if not chamsSettings.Enabled or (chamsSettings.TeamCheck and isTeamMate and not isFriend) then
-        if chamsHighlightCache[player] then chamsHighlightCache[player]:Destroy(); chamsHighlightCache[player] = nil; end
-        return
-    end
-
-    local highlight = chamsHighlightCache[player]
-    if not highlight or not highlight.Parent then
-        highlight = Instance.new("Highlight")
-        highlight.Name = "PlayerChams_Visuals_" .. player.Name
-        highlight.Parent = character
-        highlight.Adornee = character
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        chamsHighlightCache[player] = highlight
-    end
-
-    highlight.Enabled = true
-    highlight.FillTransparency = 0.6 
-    highlight.OutlineTransparency = 0 
-
-    if isFriend then
-        local pulse = (math.sin(tick() * 5) + 1) / 2 
-        highlight.FillColor = chamsSettings.FriendHighlightColor:Lerp(Color3.new(0.2,0.8,0.2), pulse) 
-        highlight.OutlineColor = chamsSettings.FriendHighlightColor * 0.7
-    elseif chamsSettings.RainbowMode then
-        local hue = (tick() * chamsSettings.RainbowSpeed) % 1
-        highlight.FillColor = Color3.fromHSV(hue, 1, 1)
-        highlight.OutlineColor = Color3.fromHSV(hue, 1, 0.7)
-    else
-        highlight.FillColor = chamsSettings.HighlightColor
-        highlight.OutlineColor = chamsSettings.HighlightColor * 0.7 
-    end
-end
-
-local function ClearAllVisuals()
-    for player, gui in pairs(espElementsCache) do if gui and gui.Parent then gui:Destroy() end end
-    espElementsCache = {}
-    for player, h in pairs(chamsHighlightCache) do if h and h.Parent then h:Destroy() end end
-    chamsHighlightCache = {}
-end
-
-function VisualsModule.SetESPEnabled(value) espSettings.Enabled = value; if not value then ClearAllVisuals() end end
-function VisualsModule.SetESPShowName(value) espSettings.ShowName = value end
-function VisualsModule.SetESPShowHP(value) espSettings.ShowHP = value end
-function VisualsModule.SetESPShowWeapon(value) espSettings.ShowWeapon = value end
-function VisualsModule.SetESPShowDistance(value) espSettings.ShowDistance = value end
-function VisualsModule.SetESPShowBoundingBox(value) espSettings.ShowBoundingBox = value end
-function VisualsModule.SetESPTeamCheck(value) espSettings.TeamCheck = value end
-
-function VisualsModule.SetChamsEnabled(value) chamsSettings.Enabled = value; if not value then ClearAllVisuals() end end
-function VisualsModule.SetChamsTeamCheck(value) chamsSettings.TeamCheck = value end
-function VisualsModule.SetChamsRainbowMode(value) chamsSettings.RainbowMode = value end
-function VisualsModule.SetChamsRainbowSpeed(value) chamsSettings.RainbowSpeed = value end
-function VisualsModule.SetChamsColor(value) chamsSettings.HighlightColor = value end
-
-local function OnCharacterAdded(character)
-    local player = Players:GetPlayerFromCharacter(character)
-    if player then 
-        if espSettings.Enabled then UpdateESPForPlayer(player) end
-        if chamsSettings.Enabled then UpdateChamsForPlayer(player) end
-    end
-end
-
-local function OnPlayerAdded(player)
-    player.CharacterAdded:Connect(OnCharacterAdded)
-    if player.Character then OnCharacterAdded(player.Character) end
-end
-
-local function OnPlayerRemoving(player)
-    if espElementsCache[player] then espElementsCache[player]:Destroy(); espElementsCache[player] = nil; end
-    if chamsHighlightCache[player] then chamsHighlightCache[player]:Destroy(); chamsHighlightCache[player] = nil; end
-end
-
-Players.PlayerAdded:Connect(OnPlayerAdded)
-for _, player in ipairs(Players:GetPlayers()) do OnPlayerAdded(player) end
-Players.PlayerRemoving:Connect(OnPlayerRemoving)
-
-RunService.RenderStepped:Connect(function()
-    if espSettings.Enabled or chamsSettings.Enabled then
         for _, player in ipairs(Players:GetPlayers()) do
-            if espSettings.Enabled then UpdateESPForPlayer(player) end
-            if chamsSettings.Enabled then UpdateChamsForPlayer(player) end
-        end
-    else
-        if next(espElementsCache) or next(chamsHighlightCache) then ClearAllVisuals() end
-    end
-end)
+            if player ~= localPlayer then
+                if visualSettings.highlightEnabled then
+                    createOrUpdateHighlight(player)
+                elseif highlights[player] then
+                    highlights[player]:Destroy()
+                    highlights[player] = nil
+                end
 
-return VisualsModule
+                if visualSettings.espEnabled then
+                    createOrUpdateEsp(player)
+                elseif esps[player] then
+                    for _, element in pairs(esps[player]) do element:Destroy() end
+                    esps[player] = nil
+                end
+            else 
+                if highlights[player] then highlights[player]:Destroy(); highlights[player] = nil end
+                if esps[player] then for _, e in pairs(esps[player]) do e:Destroy() end; esps[player] = nil end
+            end
+        end
+    end)
+end
 

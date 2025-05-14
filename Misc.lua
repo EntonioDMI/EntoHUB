@@ -1,143 +1,157 @@
-local MiscModule = {}
+return function(tabInstance, sharedContext)
+    local uiLibrary = sharedContext.uiLibrary
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
 
-local GravityEmulationEnabled = false
-local SpeedEmulationEnabled = false
-local JumpEmulationEnabled = false
+    local miscSettings = {
+        emulatedGravityEnabled = false,
+        emulatedGravityStrength = 1,
+        emulatedSpeedEnabled = false,
+        emulatedSpeedMultiplier = 1,
+        emulatedJumpEnabled = false,
+        emulatedJumpMultiplier = 1
+    }
 
-local GravityMultiplierValue = 1
-local SpeedMultiplierValue = 1
-local JumpMultiplierValue = 1
+    local localPlayer = Players.LocalPlayer
+    local originalWalkSpeed = 16
+    local originalJumpPower = 50
+    local originalGravity = workspace.Gravity
 
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
-
-local originalWalkSpeed = 16
-local originalJumpPower = 50
-local originalGravity = workspace.Gravity
-
-local characterBodyForce = nil
-
-local function UpdateCharacterMovementProperties()
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("Humanoid") then return end
-    local humanoid = character.Humanoid
-
-    if SpeedEmulationEnabled then
-        humanoid.WalkSpeed = originalWalkSpeed * SpeedMultiplierValue
-    else
-        humanoid.WalkSpeed = originalWalkSpeed
-    end
-
-    if JumpEmulationEnabled then
-        humanoid.JumpPower = originalJumpPower * JumpMultiplierValue
-    else
-        humanoid.JumpPower = originalJumpPower
-    end
-end
-
-local function ApplyGravityEmulationEffect()
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then
-        if characterBodyForce then characterBodyForce:Destroy(); characterBodyForce = nil; end
-        return
-    end
-    local hrp = character.HumanoidRootPart
-    local humanoid = character.Humanoid
-
-    if GravityEmulationEnabled and humanoid:GetState() ~= Enum.HumanoidStateType.Seated and humanoid.Health > 0 then
-        if not characterBodyForce or characterBodyForce.Parent ~= hrp then
-            if characterBodyForce then characterBodyForce:Destroy() end
-            characterBodyForce = Instance.new("BodyForce")
-            characterBodyForce.Name = "GravityEmulationForce_EntoHUB"
-            characterBodyForce.Parent = hrp
+    if localPlayer and localPlayer.Character then
+        local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            originalWalkSpeed = humanoid.WalkSpeed
+            originalJumpPower = humanoid.JumpPower
         end
-        local totalMass = 0
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                totalMass = totalMass + part:GetMass()
+    end
+
+    local gravitySection = tabInstance:CreateSection({
+        Name = "Emulated Gravity"
+    })
+
+    gravitySection:AddToggle({
+        Name = "Enabled",
+        Flag = "MiscGravity_Enabled",
+        Callback = function(value)
+            miscSettings.emulatedGravityEnabled = value
+            if not value and localPlayer and localPlayer.Character then
+                local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    -- Attempt to reset, though direct gravity change is not the goal
+                end
             end
         end
-        if totalMass == 0 then totalMass = humanoid:GetMass() end 
-        if totalMass == 0 then totalMass = 10 end 
+    })
 
-        local effectiveGravity = originalGravity * GravityMultiplierValue
-        local forceMagnitude = (effectiveGravity - originalGravity) * totalMass 
-        characterBodyForce.Force = Vector3.new(0, forceMagnitude, 0)
-    else
-        if characterBodyForce then
-            characterBodyForce:Destroy()
-            characterBodyForce = nil
+    gravitySection:AddSlider({
+        Name = "Strength Multiplier",
+        Flag = "MiscGravity_Strength",
+        Value = 1,
+        Min = 0.1,
+        Max = 5,
+        Precise = 1,
+        Callback = function(value)
+            miscSettings.emulatedGravityStrength = value
         end
-    end
-end
+    })
 
-function MiscModule.SetGravityEnabled(value)
-    GravityEmulationEnabled = value
-    if not value and characterBodyForce then
-        characterBodyForce:Destroy()
-        characterBodyForce = nil
-    end
-    ApplyGravityEmulationEffect() 
-end
+    local speedSection = tabInstance:CreateSection({
+        Name = "Emulated Speed"
+    })
 
-function MiscModule.SetGravityMultiplier(value)
-    GravityMultiplierValue = value
-    if GravityEmulationEnabled then ApplyGravityEmulationEffect() end
-end
+    speedSection:AddToggle({
+        Name = "Enabled",
+        Flag = "MiscSpeed_Enabled",
+        Callback = function(value)
+            miscSettings.emulatedSpeedEnabled = value
+            if not value and localPlayer and localPlayer.Character then
+                local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.WalkSpeed = originalWalkSpeed
+                end
+            end
+        end
+    })
 
-function MiscModule.SetSpeedEnabled(value)
-    SpeedEmulationEnabled = value
-    UpdateCharacterMovementProperties()
-end
+    speedSection:AddSlider({
+        Name = "Speed Multiplier",
+        Flag = "MiscSpeed_Multiplier",
+        Value = 1,
+        Min = 0.1,
+        Max = 5,
+        Precise = 1,
+        Callback = function(value)
+            miscSettings.emulatedSpeedMultiplier = value
+        end
+    })
 
-function MiscModule.SetSpeedMultiplier(value)
-    SpeedMultiplierValue = value
-    if SpeedEmulationEnabled then UpdateCharacterMovementProperties() end
-end
+    local jumpSection = tabInstance:CreateSection({
+        Name = "Emulated Jump"
+    })
 
-function MiscModule.SetJumpEnabled(value)
-    JumpEmulationEnabled = value
-    UpdateCharacterMovementProperties()
-end
+    jumpSection:AddToggle({
+        Name = "Enabled",
+        Flag = "MiscJump_Enabled",
+        Callback = function(value)
+            miscSettings.emulatedJumpEnabled = value
+            if not value and localPlayer and localPlayer.Character then
+                local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.JumpPower = originalJumpPower
+                end
+            end
+        end
+    })
 
-function MiscModule.SetJumpMultiplier(value)
-    JumpMultiplierValue = value
-    if JumpEmulationEnabled then UpdateCharacterMovementProperties() end
-end
+    jumpSection:AddSlider({
+        Name = "Jump Multiplier",
+        Flag = "MiscJump_Multiplier",
+        Value = 1,
+        Min = 0.1,
+        Max = 5,
+        Precise = 1,
+        Callback = function(value)
+            miscSettings.emulatedJumpMultiplier = value
+        end
+    })
 
-local function OnCharacterAdded(character)
-    local humanoid = character:WaitForChild("Humanoid")
-    originalWalkSpeed = humanoid.WalkSpeed
-    originalJumpPower = humanoid.JumpPower
-    originalGravity = workspace.Gravity 
-    
-    UpdateCharacterMovementProperties()
-    ApplyGravityEmulationEffect()
+    RunService.Heartbeat:Connect(function(deltaTime)
+        if not localPlayer or not localPlayer.Character then 
+            localPlayer = Players.LocalPlayer 
+            if localPlayer and localPlayer.Character then
+                 local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                 if humanoid then
+                    originalWalkSpeed = humanoid.WalkSpeed
+                    originalJumpPower = humanoid.JumpPower
+                 end
+            else
+                return
+            end
+        end
+        
+        local humanoid = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local hrp = localPlayer.Character:FindFirstChild("HumanoidRootPart")
 
-    humanoid.Died:Connect(function()
-        if characterBodyForce and characterBodyForce.Parent == character:FindFirstChild("HumanoidRootPart") then
-            characterBodyForce:Destroy()
-            characterBodyForce = nil
+        if not humanoid or not hrp then return end
+
+        if miscSettings.emulatedGravityEnabled then
+            local downForce = Vector3.new(0, -workspace.Gravity * miscSettings.emulatedGravityStrength * deltaTime * 50, 0) 
+            if hrp:IsA("BasePart") then
+                 hrp.Velocity = hrp.Velocity + downForce
+            end
+        end
+
+        if miscSettings.emulatedSpeedEnabled then
+            humanoid.WalkSpeed = originalWalkSpeed * miscSettings.emulatedSpeedMultiplier
+        else
+            humanoid.WalkSpeed = originalWalkSpeed
+        end
+
+        if miscSettings.emulatedJumpEnabled then
+            humanoid.JumpPower = originalJumpPower * miscSettings.emulatedJumpMultiplier
+        else
+            humanoid.JumpPower = originalJumpPower
         end
     end)
 end
-
-if LocalPlayer.Character then
-    OnCharacterAdded(LocalPlayer.Character)
-end
-LocalPlayer.CharacterAdded:Connect(OnCharacterAdded)
-
-RunService.Heartbeat:Connect(function(deltaTime)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        if GravityEmulationEnabled then
-            ApplyGravityEmulationEffect()
-        end
-        UpdateCharacterMovementProperties()
-    else
-        if characterBodyForce then characterBodyForce:Destroy(); characterBodyForce = nil; end
-    end
-end)
-
-return MiscModule
 
