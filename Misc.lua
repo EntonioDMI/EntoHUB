@@ -1,5 +1,3 @@
-return function()
-
 local MiscModule = {}
 
 local GravityEmulationEnabled = false
@@ -16,7 +14,7 @@ local RunService = game:GetService("RunService")
 
 local originalWalkSpeed = 16
 local originalJumpPower = 50
-local originalGravity = workspace.Gravity -- Store initial workspace gravity
+local originalGravity = workspace.Gravity
 
 local characterBodyForce = nil
 
@@ -142,4 +140,4 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 return MiscModule
-end
+
